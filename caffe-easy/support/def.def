@@ -45,3 +45,5 @@ cropImage
 cropCenterImage
 forwardByTaskPool
 forwardByTaskPool2
+model_compress_tobuf_step2_getmodel
+model_compress_tobuf_step1_setup

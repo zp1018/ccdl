@@ -49,12 +49,19 @@ void recThread(void* param){
 			//}
 			//printf("%.2f, ºÄÊ±£º%.2f ms\n", getTickCount() / getTickFrequency(), time);
 #endif
-
+			if (val == 0){
+				printf("error\n");
+				exit(0);
+			}
 			//printf("%d\n", val);
 			releaseSoftmaxResult(val);
 		}
 		else{
 			BlobData* blob = forwardByTaskPool(pool, &imd[0], imd.size(), "cccp7");
+			if (blob == 0){
+				printf("error\n");
+				exit(0);
+			}
 			printf("0x%p blob = %d, %d, %d, %d\n", blob, blob->count, blob->channels, blob->height, blob->width);
 			releaseBlobData(blob);
 		}

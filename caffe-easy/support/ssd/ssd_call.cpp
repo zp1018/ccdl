@@ -120,7 +120,7 @@ int main(int argc, char** argv){
 
 	float means[] = { 104.0f, 117.0f, 123.0f };
 	Classifier cc(prototxt, caffemodel, 1, 0, 3, means);
-	WPtr<BlobData> fr = cc.extfeatureImgs({ im, im }, "detection_out");
+	WPtr<BlobData> fr = cc.extfeature(im, "detection_out");
 	vector<DetectObjectInfo> objs = toDetInfo(fr, im.cols, im.rows);
 	printf("%d, %d, %d, %d, count = %d\n", fr->count, fr->channels, fr->height, fr->width, fr->count);
 	for (int i = 0; i < objs.size(); ++i){
