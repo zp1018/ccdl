@@ -1,18 +1,20 @@
-#coding=gbk
+#coding=utf-8
 import os
 import cv2
+import sys
+import math
+import random
 
 ##############################################
-# ssd lab v1.1
+# ssd lab v1.3
 # wish
-# 2017-04-08 12:46:04
+# 2017年8月12日 16:59:37
 
 #parameters
-path = "frames"
+path = "mo-xiao-fan-lan"
 wndName = "ESC close, s save, c clean, p back"
-className = ["plane", "demo"]
-colors = [(0, 255, 0), (255, 0, 0)]
-
+className = ["028", "004"]
+colors = [(0, 255, 0), (255, 0, 0), (255, 255, 0), (0, 255, 255), (255, 0, 255)]
 
 #code
 currentClass = 0
@@ -21,6 +23,10 @@ imgs = [(imgs[i], path + "/" + imgs[i]) for i in range(len(imgs))]
 for i in range(len(imgs)-1, -1, -1):
     if not imgs[i][1].lower().endswith("jpg") and not imgs[i][1].lower().endswith("png") and not imgs[i][1].lower().endswith("jpeg"):
         del imgs[i]
+
+
+if len(sys.argv) > 1 and sys.argv[1] == "r":
+    random.shuffle(imgs)
 
 show = []
 cach = []
@@ -38,6 +44,9 @@ def refreshCurrentShow():
     if waitSecDown:
         cv2.circle(cach, dpoint, 5, colors[currentClass], 2)
     cv2.imshow(wndName, cach)
+
+def l2dis(a, b):
+    return math.sqrt(a*a+b*b)
 
 def onMouse(event, x, y, flag, points):
     global dpoint, waitSecDown, wndName, epoint, cach
@@ -57,6 +66,28 @@ def onMouse(event, x, y, flag, points):
         cv2.line(cach2, (0, y), (cach.shape[1], y), (0, 255, 0), 2)
         cv2.line(cach2, (x, 0), (x, cach.shape[0]), (0, 255, 0), 2)
         cv2.imshow(wndName, cach2)
+
+    elif event == cv2.EVENT_RBUTTONDOWN:
+        vd = []
+        invd = 9999999
+        for i in range(len(objs)):
+            cx = (objs[i][0][0] + objs[i][1][0]) * 0.5
+            cy = (objs[i][0][1] + objs[i][1][1]) * 0.5
+            xmin = objs[i][0][0] if objs[i][0][0] < objs[i][1][0] else objs[i][1][0]
+            xmax = objs[i][0][0] if objs[i][0][0] > objs[i][1][0] else objs[i][1][0]
+            ymin = objs[i][0][1] if objs[i][0][1] < objs[i][1][1] else objs[i][1][1]
+            ymax = objs[i][0][1] if objs[i][0][1] > objs[i][1][1] else objs[i][1][1]
+            if x >= xmin and x <= xmax and y >= ymin and y <= ymax:
+                vd.append(l2dis(cx - x, cy - y))
+                #del objs[n]
+            else:
+                vd.append(invd)
+
+        if len(vd) > 0:
+            n = vd.index(min(vd))
+            if(vd[n] != invd):
+                del objs[n]
+                refreshCurrentShow()
 
 def drawObjs(objs, canvas):
     for item in objs:
@@ -79,7 +110,7 @@ def loadObjs(name):
             info = txt.readline().split(",")
             d = (int(info[0]), int(info[1]))
             e = (int(info[2]), int(info[3]))
-            c = int(info[4])
+            c = int(className.index(info[5].split("\n")[0]))
             obs.append((d, e, c))
     return cls, obs
 
