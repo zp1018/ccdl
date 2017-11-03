@@ -25,8 +25,67 @@ using google::protobuf::io::ZeroCopyInputStream;
 using google::protobuf::io::CodedInputStream;
 using google::protobuf::io::ZeroCopyOutputStream;
 using google::protobuf::io::CodedOutputStream;
+using google::protobuf::io::IstreamInputStream;
 using google::protobuf::io::GzipOutputStream;
 using google::protobuf::Message;
+
+class LogStreamBuf : public std::streambuf {
+public:
+	// REQUIREMENTS: "len" must be >= 2 to account for the '\n' and '\n'.
+	LogStreamBuf(char *buf, int len) {
+		setp(buf, buf + len - 2);
+	}
+	// This effectively ignores overflow.
+	virtual int_type overflow(int_type ch) {
+		return ch;
+	}
+
+	// Legacy public ostrstream method.
+	size_t pcount() const { return pptr() - pbase(); }
+	char* pbase() const { return std::streambuf::pbase(); }
+};
+
+
+class MemoryStreamBufLocal : public std::streambuf {
+public:
+	MemoryStreamBufLocal(const void* pBuffer, int bufferSize);
+public:
+
+	int    _written;
+	char*    _pBuffer;
+	int    _bufferSize;
+};
+
+MemoryStreamBufLocal::MemoryStreamBufLocal(const void* pBuffer, int bufferSize)
+: _pBuffer((char*)pBuffer), _bufferSize(bufferSize), _written(0) {
+	setg(_pBuffer, _pBuffer, _pBuffer + _bufferSize);
+	setp(_pBuffer, _pBuffer + _bufferSize);
+}
+
+class LogStream : public std::ostream {
+public:
+	LogStream(char *buf, int len, int ctr)
+		: std::ostream(NULL),
+		streambuf_(buf, len),
+		ctr_(ctr),
+		self_(this) {
+			rdbuf(&streambuf_);
+		}
+
+	int ctr() const { return ctr_; }
+	void set_ctr(int ctr) { ctr_ = ctr; }
+	LogStream* self() const { return self_; }
+
+	// Legacy std::streambuf methods.
+	size_t pcount() const { return streambuf_.pcount(); }
+	char* pbase() const { return streambuf_.pbase(); }
+	char* str() const { return pbase(); }
+
+private:
+	LogStreamBuf streambuf_;
+	int ctr_;  // Counter hack (for the LOG_EVERY_X() macro)
+	LogStream *self_;  // Consistency check hack
+};
 
 extern "C"{
 	void compressNet(NetParameter& net, float up = 1000){
@@ -82,6 +141,51 @@ extern "C"{
 #endif
 			}
 		}
+	}
+
+	static vector<char> outbuffer_data;
+	Caffe_API bool __stdcall model_compress_tobuf_step2_getmodel(char* buffer){
+		if (outbuffer_data.size() > 0 && buffer){
+			memcpy(buffer, &outbuffer_data[0], outbuffer_data.size());
+			return true;
+		}
+		return false;
+	}
+
+	Caffe_API bool __stdcall model_compress_tobuf_step1_setup(const char* inbuf, int insize, float upLevel, int* outsize){
+		if (inbuf == 0 || insize < 1) return false;
+		MemoryStreamBufLocal buf(inbuf, insize);
+		std::istream is(&buf);
+
+		NetParameter net;
+		bool success = false;
+		{
+			IstreamInputStream* input = new IstreamInputStream(&is);
+			CodedInputStream* coded_input = new CodedInputStream(input);
+			coded_input->SetTotalBytesLimit(INT_MAX, 536870912);
+			success = net.ParseFromCodedStream(coded_input);
+			delete coded_input;
+			delete input;
+		}
+		if (!success) return false;
+
+		compressNet(net, upLevel);
+
+		vector<char> tmpbuf;
+		tmpbuf.resize(insize * 1.5);
+		LogStream output(&tmpbuf[0], tmpbuf.size(), 0);
+		success = net.SerializePartialToOstream(&output);
+
+		int olen = output.pcount();
+		if (olen > 0){
+			outbuffer_data.resize(olen);
+			memcpy(&outbuffer_data[0], &tmpbuf[0], olen);
+		}
+		else{
+			outbuffer_data.clear();
+		}
+		if (outsize) *outsize = olen;
+		return success;
 	}
 
 	//, int saveToNormal
