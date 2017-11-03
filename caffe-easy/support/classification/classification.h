@@ -8,6 +8,14 @@
 #endif
 #include "classification-c.h"
 
+#ifndef BUILD_DLL
+	#ifdef _DEBUG
+	#pragma comment(lib, "classification_dll-cudnnd.lib")
+	#else
+	#pragma comment(lib, "classification_dll-cudnn.lib")
+	#endif
+#endif
+
 #ifdef __cplusplus
 class Caffe_API Classifier {
 public:
@@ -39,6 +47,8 @@ public:
 	BlobData* extfeature(const cv::Mat& img, const char* layer_name = 0);
 	BlobData* extfeature(const cv::Mat* imgs, int num, const char* layer_name = 0);
 	void forward(const cv::Mat& img);
+	void forward_raw(const cv::Mat& raw_matrix);
+	void forward_raw(const cv::Mat* raw_channels, int num);
 	void forward(const cv::Mat* imgs, int num);
 	void reshape(int width, int height);
 	void reshape(int num, int height, int width);
@@ -52,8 +62,14 @@ public:
 	BlobData* getOutputBlob(int num_index, int index);
 	int getOutputBlobCount();
 	BlobData* getBlobData(const char* blob_name);
+
+	//如果blob的空间不够，会自动重新分配空间，如果够就直接复制
+	void getBlobData(const char* blob_name, BlobData* inplace_blob);
 	BlobData* getBlobData(int num_index, const char* blob_name);
 	SoftmaxResult* getSoftmaxResult(int num_index = 0, int top_n = 5);
+
+	void setInputBlobData(const cv::Mat& data, int index);
+	void forward();
 
 private:
 	//Blob<float>
@@ -80,6 +96,7 @@ private:
 	void* net_;
 };
 
+BlobData* createEmptyBlobData();
 
 inline void WPtr<BlobData>::release(BlobData* p){
 	releaseBlobData(p);

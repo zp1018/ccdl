@@ -217,20 +217,18 @@ namespace caffe {
 		const std::string & encoding, MTCNNDatum* datum){
 
 		//label, roi_minx, roi_miny, roi_maxx, roi_maxy, pts
-		bool succ = ReadImageToDatum(filename, { label[0] }, height, width, is_color, encoding, datum->mutable_datum());
+		bool succ = ReadImageToDatum(filename, { 0 }, height, width, is_color, encoding, datum->mutable_datum());
 		if (succ){
-			if (label.size() > 1)
-				datum->mutable_roi()->set_xmin(label[1]);
+			datum->clear_rois();
+			for (int i = 0; i < label.size() / 4; ++i){
+				CHECK(i * 4 + 3 < label.size());
 
-			if (label.size() > 2)
-				datum->mutable_roi()->set_ymin(label[2]);
-
-			if (label.size() > 3)
-				datum->mutable_roi()->set_xmax(label[3]);
-
-			if (label.size() > 4)
-				datum->mutable_roi()->set_ymax(label[4]);
-
+				auto rois = datum->add_rois();
+				rois->set_xmin(label[i * 4 + 0]);
+				rois->set_ymin(label[i * 4 + 1]);
+				rois->set_xmax(label[i * 4 + 2]);
+				rois->set_ymax(label[i * 4 + 3]);
+			}
 			auto pts = datum->mutable_pts();
 			pts->Clear();
 			for (int i = 5; i < label.size(); ++i)

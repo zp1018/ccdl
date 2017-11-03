@@ -36,37 +36,19 @@ namespace caffe {
 	template <typename Dtype>
 	void MTCNNDataLayer<Dtype>::DataLayerSetUp(const vector<Blob<Dtype>*>& bottom,
 		const vector<Blob<Dtype>*>& top) {
+		const int batch_size = this->layer_param_.data_param().batch_size();
 		// Read a data point, and use it to initialize the top blob.
 		MTCNNDatum& datum = *(reader_.full().peek());
 		this->output_labels_ = top.size() > 1;
 		this->output_roi_ = top.size() > 2;
 		this->output_pts_ = top.size() > 3;
-
-		int batch_size = this->layer_param_.data_param().batch_size();
-		int num_positive = this->layer_param_.mtcnn_data_param().num_positive();
-		int num_negitive = this->layer_param_.mtcnn_data_param().num_negitive();
-		int num_part = this->layer_param_.mtcnn_data_param().num_part();
-		bool augmented = this->layer_param_.mtcnn_data_param().augmented();
-		int resize_width = this->layer_param_.mtcnn_data_param().resize_width();
-		int resize_height = this->layer_param_.mtcnn_data_param().resize_height();
-
-		num_positive = num_positive == -1 ? batch_size : num_positive;
-		num_negitive = num_negitive == -1 ? batch_size : num_negitive;
-		num_part = num_part == -1 ? batch_size : num_part;
-		batch_size = num_positive + num_negitive + num_part;
 		
 		//data, label, roi, pts
 		// Use data_transformer to infer the expected blob shape from datum.
 		vector<int> top_shape = this->data_transformer_->InferBlobShape(datum.datum());
-		raw_image_shape_ = top_shape;
-		//保证转换器的原图尺寸
-		this->transformed_data_.Reshape(raw_image_shape_);
+		this->transformed_data_.Reshape(top_shape);
 		// Reshape top[0] and prefetch_data according to the batch_size.
-
-		//小图的尺寸
 		top_shape[0] = batch_size;
-		top_shape[2] = resize_height;
-		top_shape[3] = resize_width;
 
 		//data
 		top[0]->Reshape(top_shape);
@@ -151,21 +133,11 @@ namespace caffe {
 
 		// Reshape according to the first datum of each batch
 		// on single input batches allows for inputs of varying dimension.
-		const int raw_batch_size = this->layer_param_.data_param().batch_size();
+		const int batch_size = this->layer_param_.data_param().batch_size();
 		int num_positive = this->layer_param_.mtcnn_data_param().num_positive();
 		int num_negitive = this->layer_param_.mtcnn_data_param().num_negitive();
 		int num_part = this->layer_param_.mtcnn_data_param().num_part();
 		bool augmented = this->layer_param_.mtcnn_data_param().augmented();
-		bool fliped = this->layer_param_.mtcnn_data_param().flip();
-		int resize_width = this->layer_param_.mtcnn_data_param().resize_width();
-		int resize_height = this->layer_param_.mtcnn_data_param().resize_height();
-		float min_negitive_scale = this->layer_param_.mtcnn_data_param().min_negitive_scale();
-		float max_negitive_scale = this->layer_param_.mtcnn_data_param().max_negitive_scale();
-
-		num_positive = num_positive == -1 ? raw_batch_size : num_positive;
-		num_negitive = num_negitive == -1 ? raw_batch_size : num_negitive;
-		num_part = num_part == -1 ? raw_batch_size : num_part;
-		const int batch_size = num_positive + num_negitive + num_part;
 
 		MTCNNDatum& datum = *(reader_.full().peek());
 		// Use data_transformer to infer the expected blob shape from datum.
@@ -173,86 +145,8 @@ namespace caffe {
 		this->transformed_data_.Reshape(top_shape);
 		// Reshape batch according to the batch_size.
 		top_shape[0] = batch_size;
-		top_shape[2] = resize_height;
-		top_shape[3] = resize_width;
 		batch->data_.Reshape(top_shape);
 
-		//为大图准备一个缓冲区，该缓冲区的图，以平面放的，需要变换成分通道
-		Mat buffer(raw_image_shape_[2], raw_image_shape_[3], CV_32FC(raw_image_shape_[1]));
-		Dtype* top_data = batch->data_.mutable_cpu_data();
-		Dtype* top_label = batch->label_.mutable_cpu_data();
-		Dtype* top_roi = batch->roi_.mutable_cpu_data();
-
-		vector<Mat> ims;
-		vector<vector<Rect>> bboxs;
-		//Dtype* top_pts = output_pts_ ? batch->pts_.mutable_cpu_data() : 0;
-		for (int item_id = 0; item_id < raw_batch_size; ++item_id) {
-			timer.Start();
-			// get a datum
-			MTCNNDatum& datum = *(reader_.full().pop("Waiting for data"));
-			const Datum& data = datum.datum();
-			//printf("****************datum.pts_size() = %d\n", datum.pts_size());  
-
-			read_time += timer.MicroSeconds();
-			timer.Start();
-			// Apply data transformations (mirror, scale, crop...)
-			this->transformed_data_.set_cpu_data((Dtype*)buffer.data);
-			this->data_transformer_->Transform(datum.datum(), &(this->transformed_data_));
-			//原图转换完毕了
-			if (buffer.channels() > 1){
-				vector<Mat> chs;
-				Mat mergeImage;
-				for (int k = 0; k < buffer.channels(); ++k){
-					chs.push_back(Mat(buffer.rows, buffer.cols, CV_32F, (char*)((float*)buffer.data + buffer.rows * buffer.cols)));
-				}
-				merge(chs, mergeImage);
-				ims.push_back(mergeImage);
-			}
-			else{
-				ims.push_back(buffer.clone());
-			}
-
-			vector<Rect> boxs;
-			for (int k = 0; k < datum.rois_size(); ++k){
-				Rect box(
-					datum.rois(k).xmin(), datum.rois(k).ymin(),
-					datum.rois(k).xmax() - datum.rois(k).xmin() + 1,
-					datum.rois(k).ymax() - datum.rois(k).ymin() + 1);
-				boxs.push_back(box);
-			}
-			bboxs.push_back(boxs);
-			trans_time += timer.MicroSeconds();
-			reader_.free().push(const_cast<MTCNNDatum*>(&datum));
-		}
-
-		vector<SampleInfo> samples;
-		genSamples(ims, bboxs, Size(resize_width, resize_height), num_positive, num_negitive, num_part, samples, min_negitive_scale, max_negitive_scale, augmented, fliped);
-
-		for (int i = 0; i < samples.size(); ++i){
-			int offset = batch->data_.offset(i);
-			Dtype* image = top_data + offset;
-
-			//分通道存
-			if(samples[i].im.channels() > 1){
-				Dtype* ptr = image;
-				Mat ch;
-				for (int k = 0; k < samples[i].im.channels(); ++k){
-					cv::extractChannel(samples[i].im, ch, k);
-					memcpy(ptr, ch.data, ch.rows*ch.cols*sizeof(Dtype));
-					ptr += ch.rows*ch.cols;
-				}
-			}
-			else{
-				memcpy(image, samples[i].im.data, samples[i].im.rows*samples[i].im.cols*sizeof(Dtype));
-			}
-
-			top_label[i] = samples[i].label;
-			top_roi[i * 4 + 0] = samples[i].offx1;
-			top_roi[i * 4 + 1] = samples[i].offy1;
-			top_roi[i * 4 + 2] = samples[i].offx2;
-			top_roi[i * 4 + 3] = samples[i].offy2;
-		}
-#if 0
 		Dtype* top_data = batch->data_.mutable_cpu_data();
 		Dtype* top_label = batch->label_.mutable_cpu_data();
 		Dtype* top_roi = batch->roi_.mutable_cpu_data();
@@ -296,7 +190,6 @@ namespace caffe {
 			trans_time += timer.MicroSeconds();
 			reader_.free().push(const_cast<MTCNNDatum*>(&datum));
 		}
-#endif
 		timer.Stop();
 		batch_timer.Stop();
 		DLOG(INFO) << "Prefetch batch: " << batch_timer.MilliSeconds() << " ms.";

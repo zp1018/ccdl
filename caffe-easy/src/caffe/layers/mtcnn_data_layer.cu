@@ -28,25 +28,25 @@ void MTCNNDataLayer<Dtype>::Forward_gpu(
   // Reshape to loaded data.
   top[0]->ReshapeLike(batch->data_);
   // Copy the data
-  caffe_copy(batch->data_.count(), batch->data_.cpu_data(),
-	  top[0]->mutable_cpu_data());
+  caffe_copy(batch->data_.count(), batch->data_.gpu_data(),
+	  top[0]->mutable_gpu_data());
   DLOG(INFO) << "Prefetch copied";
 
   //label
   top[1]->ReshapeLike(batch->label_);
-  caffe_copy(batch->label_.count(), batch->label_.cpu_data(),
-	  top[1]->mutable_cpu_data());
+  caffe_copy(batch->label_.count(), batch->label_.gpu_data(),
+	  top[1]->mutable_gpu_data());
 
   //roi
   top[2]->ReshapeLike(batch->roi_);
-  caffe_copy(batch->roi_.count(), batch->roi_.cpu_data(),
-	  top[2]->mutable_cpu_data());
+  caffe_copy(batch->roi_.count(), batch->roi_.gpu_data(),
+	  top[2]->mutable_gpu_data());
 
   if (output_pts_){
 	  //pts
 	  top[3]->ReshapeLike(batch->pts_);
-	  caffe_copy(batch->pts_.count(), batch->pts_.cpu_data(),
-		  top[3]->mutable_cpu_data());
+	  caffe_copy(batch->pts_.count(), batch->pts_.gpu_data(),
+		  top[3]->mutable_gpu_data());
   }
 
   CUDA_CHECK(cudaStreamSynchronize(cudaStreamDefault));

@@ -89,7 +89,10 @@ void Solver<Dtype>::CheckType(SolverParameter* param) {
 
 template <typename Dtype>
 void Solver<Dtype>::Init(const SolverParameter& param) {
-
+	if (Caffe::root_solver())
+		Caffe::set_root_solver_ptr(this);
+	else
+		Caffe::set_root_solver_ptr((void*)root_solver_);
   CHECK(Caffe::root_solver() || root_solver_)
       << "root_solver_ needs to be set for all non-root solvers";
   LOG_IF(INFO, Caffe::root_solver()) << "Initializing solver from parameters: "
@@ -161,7 +164,11 @@ void Solver<Dtype>::InitTrainNet() {
   net_param.mutable_state()->CopyFrom(net_state);
   if (Caffe::root_solver()) {
     net_.reset(new Net<Dtype>(net_param));
+	  Caffe::set_root_solver(true);
+	  Caffe::set_root_solver_ptr(this);
   } else {
+	  Caffe::set_root_solver(false);
+	  Caffe::set_root_solver_ptr((void*)root_solver_);
     net_.reset(new Net<Dtype>(net_param, root_solver_->net_.get()));
   }
 }

@@ -7,6 +7,7 @@
 #include "caffe/layer.hpp"
 #include "caffe/layers/recurrent_layer.hpp"
 #include "caffe/util/math_functions.hpp"
+#include "caffe/solver.hpp"
 
 namespace caffe {
 
@@ -104,7 +105,9 @@ void RecurrentLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
     layer->add_loss_weight(1);
   }
 
+  //printf("Caffe::root_solver_ptr() = %p\n", Caffe::root_solver_ptr());
   // Create the unrolled net.
+  //unrolled_net_.reset(new Net<Dtype>(net_param, ((Solver<Dtype>*)Caffe::root_solver_ptr())->net().get()));
   unrolled_net_.reset(new Net<Dtype>(net_param));
   unrolled_net_->set_debug_info(
       this->layer_param_.recurrent_param().debug_info());

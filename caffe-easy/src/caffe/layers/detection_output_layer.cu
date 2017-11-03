@@ -125,9 +125,12 @@ void DetectionOutputLayer<Dtype>::Forward_gpu(
     top_data = top[0]->mutable_cpu_data();
   }
 
+  //统计top1所需要的输出的float长度
+  int num_top1_float_count = 1;
   int count = 0;
   boost::filesystem::path output_directory(output_directory_);
   for (int i = 0; i < num; ++i) {
+	  num_top1_float_count++;
     const int conf_idx = i * num_classes_ * num_priors_;
     int bbox_idx;
     if (share_location_) {
@@ -137,6 +140,7 @@ void DetectionOutputLayer<Dtype>::Forward_gpu(
     }
     for (map<int, vector<int> >::iterator it = all_indices[i].begin();
          it != all_indices[i].end(); ++it) {
+		num_top1_float_count++;
       int label = it->first;
       vector<int>& indices = it->second;
       if (need_save_) {
@@ -151,6 +155,7 @@ void DetectionOutputLayer<Dtype>::Forward_gpu(
         cur_bbox_data += label * num_priors_ * 4;
       }
       for (int j = 0; j < indices.size(); ++j) {
+		  num_top1_float_count += 7;
         int idx = indices[j];
         top_data[count * 7] = i;
         top_data[count * 7 + 1] = label;
@@ -288,6 +293,50 @@ void DetectionOutputLayer<Dtype>::Forward_gpu(
       }
     }
   }
+
+  if (top.size() > 1){
+	  //说明有多的输出，需要编码为我们想要的效果
+	  vector<int> shape_top1(2, 1);
+	  shape_top1[1] = num_top1_float_count;
+	  top[1]->Reshape(shape_top1);
+	  Dtype* top1_data = top[1]->mutable_cpu_data();
+	  *top1_data++ = num;
+
+	  for (int i = 0; i < num; ++i) {
+		  const int conf_idx = i * num_classes_ * num_priors_;
+		  int bbox_idx;
+		  if (share_location_) {
+			  bbox_idx = i * num_priors_ * 4;
+		  }
+		  else {
+			  bbox_idx = conf_idx * 4;
+		  }
+
+		  *top1_data++ = all_indices[i].size();
+		  for (map<int, vector<int> >::iterator it = all_indices[i].begin();
+			  it != all_indices[i].end(); ++it) {
+			  int label = it->first;
+			  vector<int>& indices = it->second;
+			  const Dtype* cur_conf_data =
+				  conf_cpu_data + conf_idx + label * num_priors_;
+			  const Dtype* cur_bbox_data = bbox_cpu_data + bbox_idx;
+			  if (!share_location_) {
+				  cur_bbox_data += label * num_priors_ * 4;
+			  }
+
+			  *top1_data++ = indices.size();
+			  for (int j = 0; j < indices.size(); ++j) {
+				  int idx = indices[j];
+				  *top1_data++ = i;
+				  *top1_data++ = label;
+				  *top1_data++ = cur_conf_data[idx];
+				  for (int k = 0; k < 4; ++k)
+					  *top1_data++ = cur_bbox_data[idx * 4 + k];
+			  }
+		  }
+	  }
+  }
+
   if (visualize_) {
 #ifdef USE_OPENCV
     vector<cv::Mat> cv_imgs;

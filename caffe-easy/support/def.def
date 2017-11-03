@@ -45,3 +45,6 @@ cropImage
 cropCenterImage
 forwardByTaskPool
 forwardByTaskPool2
+setGPU
+createEmptyBlobData
+getVersionEx

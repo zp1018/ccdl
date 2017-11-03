@@ -1,7 +1,16 @@
+
+
+
+
 #pragma once
 
 #include "support-common.h"
 #include <windows.h>
+
+#define CC_Version			3.20
+#define CC_Version_epoch    3
+#define CC_Version_major    2
+#define CC_Version_minor    0
 
 #ifdef __cplusplus
 #include <cv.h>
@@ -11,6 +20,8 @@ typedef cv::Mat Image;
 typedef void Image;
 typedef void Classifier;
 #endif
+
+#define BuildTaskPool
 
 #ifdef __cplusplus
 extern "C"{
@@ -42,8 +53,10 @@ extern "C"{
 		int channels;
 		int height;
 		int width;
+		int capacity_count;		//保留空间的元素个数长度，字节数请 * sizeof(float)
 	};
 
+#ifdef BuildTaskPool
 	struct TaskPool{
 		Classifier* model;
 		int count_worker;
@@ -72,6 +85,7 @@ extern "C"{
 		volatile bool flag_exit;
 		int gpu_id;
 	};
+#endif
 
 	//setDecipherCallback
 	const static int type_prototxt = 0;			//通过回调要求解密的部分是协议数据
@@ -84,6 +98,7 @@ extern "C"{
 	//event_free时，返回结果为0就行了，这时候length为0，data为event_decipher返回的数据指针
 	typedef void* (__stdcall *DecipherCallback)(int event, int type, const void* data, int length);
 	Caffe_API float __stdcall getVersion(DecipherCallback callback);
+	Caffe_API float __stdcall getVersionEx(int* version_epoch, int* version_major, int* version_minor);
 
 	Caffe_API void  __stdcall releaseBlobData(BlobData* ptr);
 	Caffe_API void  __stdcall releaseSoftmaxResult(SoftmaxResult* ptr);
@@ -177,6 +192,7 @@ extern "C"{
 
 	Caffe_API void __stdcall disableErrorOutput();
 
+#ifdef BuildTaskPool
 	Caffe_API TaskPool* __stdcall createTaskPool(
 		const char* prototxt_file,
 		const char* caffemodel_file,
@@ -206,6 +222,7 @@ extern "C"{
 	Caffe_API SoftmaxResult* __stdcall predictSoftmaxByTaskPool2(TaskPool* pool, const Image* img, int top_n = 1);
 	Caffe_API BlobData* __stdcall forwardByTaskPool(TaskPool* pool, const void* img, int len, const char* blob_name);
 	Caffe_API BlobData* __stdcall forwardByTaskPool2(TaskPool* pool, const Image* img, const char* blob_name);
+#endif
 #ifdef __cplusplus 
 }; 
 #endif

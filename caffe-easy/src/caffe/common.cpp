@@ -12,6 +12,13 @@ namespace caffe {
 
 // Make sure each thread can have different values.
 static boost::thread_specific_ptr<Caffe> thread_instance_;
+volatile void* Caffe::root_solver_ptr_ = 0;
+
+void Caffe::set_root_solver_ptr(void* ptr){
+	if (ptr)
+		root_solver_ptr_ = ptr;
+	//printf("****************set_root_solver_ptr = 0x%p\n", ptr);
+}
 
 Caffe& Caffe::Get() {
   if (!thread_instance_.get()) {

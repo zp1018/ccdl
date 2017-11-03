@@ -174,6 +174,19 @@ void DetectionOutputLayer<Dtype>::Reshape(const vector<Blob<Dtype>*>& bottom,
   // [image_id, label, confidence, xmin, ymin, xmax, ymax]
   top_shape.push_back(7);
   top[0]->Reshape(top_shape);
+
+  if (top.size() > 1){
+	  //说明有第二个输出 
+	  //num   block   block  block
+	  //block:  numobj  obj obj obj
+	  //obj: 7个float
+	  vector<int> top1_shape;
+	  top1_shape.push_back(bottom[0]->num());
+	  top1_shape.push_back(1);
+	  top1_shape.push_back(1);
+	  top1_shape.push_back(7);
+	  top[1]->Reshape(top1_shape);
+  }
 }
 
 template <typename Dtype>

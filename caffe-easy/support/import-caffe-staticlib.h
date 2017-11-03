@@ -4,6 +4,10 @@
 #pragma comment(lib, "ntdll.lib")
 #pragma comment(lib, "shlwapi.lib")
 
+#ifdef USE_CUDNN
+#pragma comment(lib, "cudnn.lib")
+#endif
+
 #ifdef _DEBUG
 #ifdef USE_LMDB
 	#pragma comment(lib, "lmdbd.lib")

@@ -1,4 +1,5 @@
-
+#define BuildTaskPool
+#ifdef BuildTaskPool
 #include <caffe/caffe.hpp>
 #include <boost/shared_ptr.hpp>
 #include <opencv2/core/core.hpp>
@@ -296,3 +297,4 @@ Caffe_API BlobData* __stdcall forwardByTaskPool2(TaskPool* pool, const Image* im
 	ReleaseSemaphore(pool->semaphoreGetResultFinish, 1, 0);
 	return (BlobData*)result;
 }
+#endif

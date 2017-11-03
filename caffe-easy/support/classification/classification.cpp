@@ -26,7 +26,6 @@ static volatile DecipherCallback decipherCallback = 0;
 
 #define ThisNet ((Net<float>*)net_)
 
-#define Version		3.17
 #define	snprintf	_snprintf
 #define vsnprintf	_vsnprintf
 #define errBegin	try{
@@ -59,9 +58,16 @@ Caffe_API void __stdcall disableErrorOutput(){
 	google::InitGoogleLogging("aa");
 }
 
+Caffe_API float __stdcall getVersionEx(int* version_epoch, int* version_major, int* version_minor){
+	if (version_epoch) *version_epoch = CC_Version_epoch;
+	if (version_major) *version_major = CC_Version_major;
+	if (version_minor) *version_minor = CC_Version_minor;
+	return CC_Version;
+}
+
 Caffe_API float __stdcall getVersion(DecipherCallback callback){
 	decipherCallback = callback;
-	return Version;
+	return CC_Version;
 }
 
 void setError(const char* file, int line, const char* function, const char* fmt, ...){
@@ -185,63 +191,63 @@ Caffe_API Classifier* __stdcall createClassifierByData(
 	void* ret_model = 0;
 
 	errBegin;
-		void* _pro_data = (void*)prototxt_data;
-		int _pro_len = prototxt_data_length;
-		void* _model_data = (void*)caffemodel_data;
-		int _model_len = caffemodel_data_length;
+	void* _pro_data = (void*)prototxt_data;
+	int _pro_len = prototxt_data_length;
+	void* _model_data = (void*)caffemodel_data;
+	int _model_len = caffemodel_data_length;
 
-		if (decipherCallback != 0){
-			ret_pro = decipherCallback(event_decipher, type_prototxt, _pro_data, _pro_len);
-			if (ret_pro == 0){
-				errmsg("fail to decode.");
-				return 0;
-			}
-
-			memcpy(&_pro_len, ret_pro, sizeof(_pro_len));
-			if (_pro_len == 0){
-				errmsg("fail pro len");
-				decipherCallback(event_free, type_prototxt, ret_pro, 0); ret_pro = 0;
-				return 0;
-			}
-			_pro_data = (char*)ret_pro + sizeof(_pro_len);
-
-			ret_model = decipherCallback(event_decipher, type_caffemodel, _model_data, _model_len);
-			if (ret_model == 0){
-				errmsg("fail to decodem.");
-				decipherCallback(event_free, type_prototxt, ret_pro, 0); ret_pro = 0;
-				return 0;
-			}
-
-			memcpy(&_model_len, ret_model, sizeof(_model_len));
-			if (_model_len == 0){
-				errmsg("fail mdl len");
-				decipherCallback(event_free, type_prototxt, ret_pro, 0); ret_pro = 0;
-				decipherCallback(event_free, type_caffemodel, ret_model, 0); ret_model = 0;
-				return 0;
-			}
-			_model_data = (char*)ret_model + sizeof(_model_len);
+	if (decipherCallback != 0){
+		ret_pro = decipherCallback(event_decipher, type_prototxt, _pro_data, _pro_len);
+		if (ret_pro == 0){
+			errmsg("fail to decode.");
+			return 0;
 		}
 
-		Classifier* out = new Classifier(
-			_pro_data, _pro_len, _model_data, _model_len, 
-			scale_raw, mean_file, num_means, means, gpu_id);
-
-		if (ret_pro != 0)
+		memcpy(&_pro_len, ret_pro, sizeof(_pro_len));
+		if (_pro_len == 0){
+			errmsg("fail pro len");
 			decipherCallback(event_free, type_prototxt, ret_pro, 0); ret_pro = 0;
+			return 0;
+		}
+		_pro_data = (char*)ret_pro + sizeof(_pro_len);
 
-		if (ret_model != 0)
+		ret_model = decipherCallback(event_decipher, type_caffemodel, _model_data, _model_len);
+		if (ret_model == 0){
+			errmsg("fail to decodem.");
+			decipherCallback(event_free, type_prototxt, ret_pro, 0); ret_pro = 0;
+			return 0;
+		}
+
+		memcpy(&_model_len, ret_model, sizeof(_model_len));
+		if (_model_len == 0){
+			errmsg("fail mdl len");
+			decipherCallback(event_free, type_prototxt, ret_pro, 0); ret_pro = 0;
 			decipherCallback(event_free, type_caffemodel, ret_model, 0); ret_model = 0;
-		return out;
+			return 0;
+		}
+		_model_data = (char*)ret_model + sizeof(_model_len);
 	}
-	catch (const exception& e){ setError(__FILE__, __LINE__, __FUNCTION__, "%s", e.what()); }
-	catch (...){ setError(__FILE__, __LINE__, __FUNCTION__, "unknow error"); }
+
+	Classifier* out = new Classifier(
+		_pro_data, _pro_len, _model_data, _model_len,
+		scale_raw, mean_file, num_means, means, gpu_id);
 
 	if (ret_pro != 0)
 		decipherCallback(event_free, type_prototxt, ret_pro, 0); ret_pro = 0;
 
 	if (ret_model != 0)
 		decipherCallback(event_free, type_caffemodel, ret_model, 0); ret_model = 0;
-	return 0;
+	return out;
+}
+catch (const exception& e){ setError(__FILE__, __LINE__, __FUNCTION__, "%s", e.what()); }
+catch (...){ setError(__FILE__, __LINE__, __FUNCTION__, "unknow error"); }
+
+if (ret_pro != 0)
+decipherCallback(event_free, type_prototxt, ret_pro, 0); ret_pro = 0;
+
+if (ret_model != 0)
+decipherCallback(event_free, type_caffemodel, ret_model, 0); ret_model = 0;
+return 0;
 }
 
 Caffe_API void __stdcall releaseClassifier(Classifier* classifier){
@@ -256,7 +262,8 @@ Caffe_API SoftmaxResult* __stdcall predictSoftmax(Classifier* classifier, const 
 	Mat im;
 	try{
 		im = imdecode(Mat(1, len, CV_8U, (uchar*)img), classifier->num_channels_ == 1 ? 0 : 1);
-	}catch (...){}
+	}
+	catch (...){}
 	if (im.empty()) return 0;
 
 	return classifier->predictSoftmax(im, top_n);
@@ -288,10 +295,11 @@ Caffe_API BlobData* __stdcall extfeature(Classifier* Classifier, const void* img
 	if (Classifier == 0 || len < 1 || img == 0) return 0;
 
 	Mat im;
-	
+
 	try{
 		im = imdecode(Mat(1, len, CV_8U, (uchar*)img), 1);
-	}catch (...){}
+	}
+	catch (...){}
 	if (im.empty()) return 0;
 
 	return Classifier->extfeature(im, feature_name);
@@ -381,7 +389,7 @@ Caffe_API bool __stdcall cropCenterImage(const char* img, int len, bool color, c
 Caffe_API bool __stdcall cropImage(const char* img, int len, bool color, int x, int y, int width, int height, char* buf, int* outlen, const char* ext){
 	if (!img || !buf || !outlen) return false;
 	Rect box(x, y, width, height);
-	Mat im; 
+	Mat im;
 	try{
 		im = imdecode(Mat(1, len, CV_8U, (uchar*)img), color);
 	}
@@ -480,8 +488,15 @@ Caffe_API void __stdcall forward(Classifier* classifier, const void* img, int le
 
 //获取任意层的blob
 Caffe_API BlobData* __stdcall getBlobData(Classifier* classifier, const char* blob_name){
-	if (!classifier) return 0;
-	if (blob_name == 0) return 0;
+	if (!classifier){
+		printf("!classifier\n");
+		return 0;
+	}
+
+	if (blob_name == 0){
+		printf("blob_name == 0\n");
+		return 0;
+	}
 	return classifier->getBlobData(blob_name);
 }
 
@@ -556,8 +571,10 @@ BlobData* Classifier::getOutputBlob(int num_index, int index){
 BlobData* Classifier::getBlobDataByRawBlob(int num_index, void* _blob){
 
 	Blob<float>* blob = (Blob<float>*)_blob;
-	if (num_index < 0 || num_index >= blob->num()) return 0;
-
+	if (num_index < 0 || num_index >= blob->num()) {
+		printf("num_index < 0 || num_index[%d] >= blob->num()[%d]\n", num_index, blob->num());
+		return 0;
+	}
 
 	const float* begin = blob->cpu_data();
 	BlobData* fresult = new BlobData();
@@ -568,6 +585,7 @@ BlobData* Classifier::getBlobDataByRawBlob(int num_index, void* _blob){
 
 	int plane = fresult->height * fresult->width * fresult->channels;
 	fresult->count = fresult->num * plane;
+	fresult->capacity_count = fresult->count;
 	fresult->list = new float[fresult->count];
 	memcpy(fresult->list, begin + num_index * plane, sizeof(float)*fresult->count);
 	return fresult;
@@ -577,7 +595,8 @@ BlobData* Classifier::getBlobDataByRawBlob(void* _blob){
 	Blob<float>* blob = (Blob<float>*)_blob;
 	const float* begin = blob->cpu_data();
 	BlobData* fresult = new BlobData();
-	fresult->count = blob->count();
+	fresult->capacity_count = blob->count();
+	fresult->count = fresult->capacity_count;
 	fresult->list = new float[fresult->count];
 	fresult->channels = blob->channels();
 	fresult->num = blob->num();
@@ -651,12 +670,33 @@ void Classifier::initNetByData(const void* prototxt_data, int prototxt_data_leng
 	ThisNet->CopyTrainedLayersFromData(caffemodel_data, caffemodel_data_length);
 }
 
+void Classifier::setInputBlobData(const Mat& data, int index){
+	CV_Assert(index < ThisNet->num_inputs() && index >= 0);
+
+	Blob<float>* input_layer = ThisNet->input_blobs()[index];
+	CHECK_EQ(
+		input_layer->count(),
+		data.channels() * data.cols * data.rows) << "Data should have same length.";
+
+	std::vector<cv::Mat> imgs = { data };
+	std::vector<cv::Mat> input_channels;
+	int width = input_layer->width();
+	int height = input_layer->height();
+	float* input_data = input_layer->mutable_cpu_data();
+	for (int i = 0; i < input_layer->channels() * input_layer->num(); ++i) {
+		cv::Mat channel(height, width, CV_32FC1, input_data);
+		input_channels.push_back(channel);
+		input_data += width * height;
+	}
+	Preprocess(imgs, input_channels);
+}
+
 void Classifier::init(float scale_raw, const char* mean_file, int num_means, float* means, int gpu_id, int cache_size){
 	this->cache_size = cache_size;
 	this->scale_raw = scale_raw;
 	setGPU(gpu_id);
 
-	CHECK_EQ(ThisNet->num_inputs(), 1) << "Network should have exactly one input.";
+	//CHECK_EQ(ThisNet->num_inputs(), 1) << "Network should have exactly one input.";
 
 	int limit_num_means = sizeof(this->mean_value_) / sizeof(this->mean_value_[0]);
 	this->num_means_ = min(limit_num_means, num_means);
@@ -666,8 +706,8 @@ void Classifier::init(float scale_raw, const char* mean_file, int num_means, flo
 	if (ThisNet->num_inputs() > 0){
 		Blob<float>* input_layer = ThisNet->input_blobs()[0];
 		num_channels_ = input_layer->channels();
-		CHECK(num_channels_ == 3 || num_channels_ == 1)
-			<< "Input layer should have 1 or 3 channels.";
+		//CHECK(num_channels_ == 3 || num_channels_ == 1)
+		//	<< "Input layer should have 1 or 3 channels.";
 		input_geometry_ = cv::Size(input_layer->width(), input_layer->height());
 
 		if (cache_size > 1){
@@ -724,7 +764,7 @@ Classifier::~Classifier(){
 
 void Classifier::reshape(int num, int height, int width){
 	Blob<float>* input_layer = ThisNet->input_blobs()[0];
-	
+
 	height = height == -1 ? input_geometry_.height : height;
 	width = width == -1 ? input_geometry_.width : width;
 	num = num == -1 ? input_layer->shape(0) : num;
@@ -757,24 +797,134 @@ void Classifier::reshape(int width, int height){
 
 	input_geometry_ = Size(width, height);
 	if (this->num_means_ > 0){
-		Scalar mean_scal;
-		for (int i = 0; i < this->num_means_; ++i)
-			mean_scal[i] = this->mean_value_[i];
-		mean_ = cv::Mat(input_geometry_, CV_32FC(this->num_means_), mean_scal);
+	Scalar mean_scal;
+	for (int i = 0; i < this->num_means_; ++i)
+	mean_scal[i] = this->mean_value_[i];
+	mean_ = cv::Mat(input_geometry_, CV_32FC(this->num_means_), mean_scal);
 	}
 	else if (!mean_.empty()){
-		resize(mean_, mean_, input_geometry_);
+	resize(mean_, mean_, input_geometry_);
 	}
 
 	Blob<float>* input_layer = ThisNet->input_blobs()[0];
 	input_layer->Reshape(1, num_channels_,
-		input_geometry_.height, input_geometry_.width);*/
+	input_geometry_.height, input_geometry_.width);*/
 	/* Forward dimension change to all layers. */
 	//ThisNet->Reshape();
 }
 
+void Classifier::forward(){
+	ThisNet->Forward();
+}
+
 void Classifier::forward(const cv::Mat& img){
 	this->forward(&img, 1);
+}
+
+void Classifier::forward_raw(const cv::Mat* raw_channels, int num){
+	Blob<float>* input_layer = ThisNet->input_blobs()[0];
+
+	int width = input_layer->width();
+	int height = input_layer->height();
+	int channels = input_layer->channels();
+	int batchsize = input_layer->num();
+
+	CHECK(raw_channels);
+	CHECK_EQ(num, batchsize * channels) << "channels must be match";
+	for (int i = 0; i < num; ++i){
+		CHECK_EQ(raw_channels[i].depth(), CV_32F) << "input matrix must be CV_32F";
+		CHECK_EQ(1, raw_channels[i].channels()) << "channels must at 1";
+		CHECK_EQ(width, raw_channels[i].cols) << "width must be match";
+		CHECK_EQ(height, raw_channels[i].rows) << "height must be match";
+	}
+
+	float* input_data = input_layer->mutable_cpu_data();
+	for (int i = 0; i < input_layer->channels() * input_layer->num(); ++i) {
+		cv::Mat channel(height, width, CV_32FC1, input_data);
+		raw_channels[i].copyTo(channel);
+		CHECK_EQ((void*)input_data, (void*)channel.data);
+		input_data += width * height;
+	}
+	ThisNet->Forward();
+}
+
+BlobData* createEmptyBlobData(){
+	BlobData* blob = new BlobData();
+	memset(blob, 0, sizeof(*blob));
+	return blob;
+}
+
+void Classifier::getBlobData(const char* blob_name, BlobData* inplace_blob){
+	CHECK(blob_name != 0 && *blob_name != 0 && inplace_blob);
+
+	if (!ThisNet->has_blob(blob_name)){
+		printf("no blob: %s\n", blob_name);
+		return;
+	}
+
+	Blob<float>* blob = ThisNet->blob_by_name(blob_name).get();
+	const float* begin = blob->cpu_data();
+
+	int need_count = blob->count();
+	if (inplace_blob->list){
+		if (inplace_blob->capacity_count >= need_count){
+			inplace_blob->count = need_count;
+			inplace_blob->channels = blob->channels();
+			inplace_blob->num = blob->num();
+			inplace_blob->height = blob->height();
+			inplace_blob->width = blob->width();
+			memcpy(inplace_blob->list, begin, sizeof(float)*inplace_blob->count);
+			return;
+		}
+
+		delete[] inplace_blob->list;
+	}
+
+	inplace_blob->count = need_count;
+	inplace_blob->capacity_count = inplace_blob->count;
+	inplace_blob->list = new float[inplace_blob->count];
+	inplace_blob->channels = blob->channels();
+	inplace_blob->num = blob->num();
+	inplace_blob->height = blob->height();
+	inplace_blob->width = blob->width();
+	memcpy(inplace_blob->list, begin, sizeof(float)*inplace_blob->count);
+}
+
+void Classifier::forward_raw(const cv::Mat& raw_matrix){
+#if 0
+	vector<Mat> chs;
+	split(raw_matrix, chs);
+	forward_raw(&chs[0], chs.size());
+#endif
+
+#if 1
+	//为了保证性能
+	Blob<float>* input_layer = ThisNet->input_blobs()[0];
+
+	int width = input_layer->width();
+	int height = input_layer->height();
+	int channels = input_layer->channels();
+	int batchsize = input_layer->num();
+
+	CHECK_EQ(raw_matrix.depth(), CV_32F) << "input matrix must be CV_32F";
+	CHECK_EQ(channels * batchsize, raw_matrix.channels()) << "channels must be match";
+	CHECK_EQ(width, raw_matrix.cols) << "width must be match";
+	CHECK_EQ(height, raw_matrix.rows) << "height must be match";
+
+	float* input_data = input_layer->mutable_cpu_data();
+	//int width = input_layer->width();
+	//int height = input_layer->height();
+	vector<Mat> input_channels;
+	for (int i = 0; i < input_layer->channels() * input_layer->num(); ++i) {
+		cv::Mat channel(raw_matrix.rows, raw_matrix.cols, CV_32FC1, input_data);
+		input_channels.push_back(channel);
+		CHECK_EQ((void*)input_data, (void*)channel.data);
+		input_data += width * height;
+	}
+	split(raw_matrix, input_channels);
+	//memcpy(input_data, raw_matrix.data, sizeof(float)*width*height*raw_matrix.channels());
+	ThisNet->Forward();
+#endif
 }
 
 void Classifier::forward(const cv::Mat* ptr_imgs, int num){
@@ -795,7 +945,7 @@ BlobData* Classifier::extfeature(const cv::Mat* imgs, int num, const char* layer
 
 BlobData* Classifier::extfeature(const cv::Mat& img, const char* feature_name){
 	return extfeature(&img, 1, feature_name);
-	
+
 #if 0
 	Blob<float>* input_layer = ThisNet->input_blobs()[0];
 	input_layer->Reshape(1, num_channels_,
@@ -848,108 +998,108 @@ MultiSoftmaxResult* Classifier::predictSoftmax(const Mat* imgs_, int num, int to
 
 /* Return the top N predictions. */
 SoftmaxResult* Classifier::predictSoftmax(const cv::Mat& img, int top_n) {
-  forward(img);
-  return getSoftmaxResult(0, top_n);
+	forward(img);
+	return getSoftmaxResult(0, top_n);
 
-  //Predict({ img }, output);
-  //std::vector<std::vector<float>> output;
-  /*
-  SoftmaxResult* result = new SoftmaxResult();
-  result->count = output.size();
-  result->list = new SoftmaxLayerOutput[result->count];
+	//Predict({ img }, output);
+	//std::vector<std::vector<float>> output;
+	/*
+	SoftmaxResult* result = new SoftmaxResult();
+	result->count = output.size();
+	result->list = new SoftmaxLayerOutput[result->count];
 
-  int N;
-  for (int i = 0; i < result->count; ++i){
-	  N = top_n;
-	  N = N > output[i].size() ? output[i].size() : N;
-	  result->list[i].result = new SoftmaxData[N];
-	  result->list[i].count = N;
+	int N;
+	for (int i = 0; i < result->count; ++i){
+	N = top_n;
+	N = N > output[i].size() ? output[i].size() : N;
+	result->list[i].result = new SoftmaxData[N];
+	result->list[i].count = N;
 
-	  std::vector<int> maxN = Argmax(&output[i][0], output[i].size(), N);
-	  for (int k = 0; k < N; ++k) {
-		  int idx = maxN[k];
-		  result->list[i].result[k].label = idx;
-		  result->list[i].result[k].conf = output[i][idx];
-	  }
-  }
-  return result;*/
+	std::vector<int> maxN = Argmax(&output[i][0], output[i].size(), N);
+	for (int k = 0; k < N; ++k) {
+	int idx = maxN[k];
+	result->list[i].result[k].label = idx;
+	result->list[i].result[k].conf = output[i][idx];
+	}
+	}
+	return result;*/
 }
 
 /* Load the mean file in binaryproto format. */
 void Classifier::SetMean(const char* mean_file) {
-  BlobProto blob_proto;
-  ReadProtoFromBinaryFileOrDie(mean_file, &blob_proto);
+	BlobProto blob_proto;
+	ReadProtoFromBinaryFileOrDie(mean_file, &blob_proto);
 
-  /* Convert from BlobProto to Blob<float> */
-  Blob<float> mean_blob;
-  mean_blob.FromProto(blob_proto);
-  CHECK_EQ(mean_blob.channels(), num_channels_)
-    << "Number of channels of mean file doesn't match input layer.";
+	/* Convert from BlobProto to Blob<float> */
+	Blob<float> mean_blob;
+	mean_blob.FromProto(blob_proto);
+	CHECK_EQ(mean_blob.channels(), num_channels_)
+		<< "Number of channels of mean file doesn't match input layer.";
 
-  /* The format of the mean file is planar 32-bit float BGR or grayscale. */
-  std::vector<cv::Mat> channels;
-  float* data = mean_blob.mutable_cpu_data();
-  for (int i = 0; i < num_channels_; ++i) {
-    /* Extract an individual channel. */
-    cv::Mat channel(mean_blob.height(), mean_blob.width(), CV_32FC1, data);
-    channels.push_back(channel);
-    data += mean_blob.height() * mean_blob.width();
-  }
+	/* The format of the mean file is planar 32-bit float BGR or grayscale. */
+	std::vector<cv::Mat> channels;
+	float* data = mean_blob.mutable_cpu_data();
+	for (int i = 0; i < num_channels_; ++i) {
+		/* Extract an individual channel. */
+		cv::Mat channel(mean_blob.height(), mean_blob.width(), CV_32FC1, data);
+		channels.push_back(channel);
+		data += mean_blob.height() * mean_blob.width();
+	}
 
-  /* Merge the separate channels into a single image. */
-  cv::Mat mean;
-  cv::merge(channels, mean);
+	/* Merge the separate channels into a single image. */
+	cv::Mat mean;
+	cv::merge(channels, mean);
 
-  /* Compute the global mean pixel value and create a mean image
-   * filled with this value. */
-  cv::Scalar channel_mean = cv::mean(mean);
-  mean_ = cv::Mat(input_geometry_, mean.type(), channel_mean);
+	/* Compute the global mean pixel value and create a mean image
+	* filled with this value. */
+	cv::Scalar channel_mean = cv::mean(mean);
+	mean_ = cv::Mat(input_geometry_, mean.type(), channel_mean);
 }
 
 void Classifier::Predict(const std::vector<cv::Mat>& imgs, std::vector<std::vector<float> >& out) {
-  Blob<float>* input_layer = ThisNet->input_blobs()[0];
-  input_layer->Reshape(imgs.size(), num_channels_,
-                       input_geometry_.height, input_geometry_.width);
-  /* Forward dimension change to all layers. */
-  ThisNet->Reshape();
+	Blob<float>* input_layer = ThisNet->input_blobs()[0];
+	input_layer->Reshape(imgs.size(), num_channels_,
+		input_geometry_.height, input_geometry_.width);
+	/* Forward dimension change to all layers. */
+	ThisNet->Reshape();
 
-  std::vector<cv::Mat> input_channels;
-  WrapInputLayer(input_channels);
+	std::vector<cv::Mat> input_channels;
+	WrapInputLayer(input_channels);
 
-  Preprocess(imgs, input_channels);
+	Preprocess(imgs, input_channels);
 
-  ThisNet->Forward();
+	ThisNet->Forward();
 
-  /* Copy the output layer to a std::vector */
-  out.resize(ThisNet->output_blobs().size());
-  for (int i = 0; i < ThisNet->output_blobs().size(); ++i){
-	  Blob<float>* output_layer = ThisNet->output_blobs()[i];
-	  const float* begin = output_layer->cpu_data();
-	  const float* end = begin + output_layer->count();
-	  out[i] = std::vector<float>(begin, end);
-  }
+	/* Copy the output layer to a std::vector */
+	out.resize(ThisNet->output_blobs().size());
+	for (int i = 0; i < ThisNet->output_blobs().size(); ++i){
+		Blob<float>* output_layer = ThisNet->output_blobs()[i];
+		const float* begin = output_layer->cpu_data();
+		const float* end = begin + output_layer->count();
+		out[i] = std::vector<float>(begin, end);
+	}
 }
 
 /* Wrap the input layer of the network in separate cv::Mat objects
- * (one per channel). This way we save one memcpy operation and we
- * don't need to rely on cudaMemcpy2D. The last preprocessing
- * operation will write the separate channels directly to the input
- * layer. */
+* (one per channel). This way we save one memcpy operation and we
+* don't need to rely on cudaMemcpy2D. The last preprocessing
+* operation will write the separate channels directly to the input
+* layer. */
 void Classifier::WrapInputLayer(std::vector<cv::Mat>& input_channels) {
-  Blob<float>* input_layer = ThisNet->input_blobs()[0];
+	Blob<float>* input_layer = ThisNet->input_blobs()[0];
 
-  int width = input_layer->width();
-  int height = input_layer->height();
-  float* input_data = input_layer->mutable_cpu_data();
-  for (int i = 0; i < input_layer->channels() * input_layer->num(); ++i) {
-    cv::Mat channel(height, width, CV_32FC1, input_data);
-    input_channels.push_back(channel);
-    input_data += width * height;
-  }
+	int width = input_layer->width();
+	int height = input_layer->height();
+	float* input_data = input_layer->mutable_cpu_data();
+	for (int i = 0; i < input_layer->channels() * input_layer->num(); ++i) {
+		cv::Mat channel(height, width, CV_32FC1, input_data);
+		input_channels.push_back(channel);
+		input_data += width * height;
+	}
 }
 
 void Classifier::Preprocess(const std::vector<cv::Mat>& imgs,
-                            std::vector<cv::Mat>& input_channels) {
+	std::vector<cv::Mat>& input_channels) {
 
 	cv::Mat sample;
 	cv::Mat sample_resized;
@@ -978,7 +1128,7 @@ void Classifier::Preprocess(const std::vector<cv::Mat>& imgs,
 			sample_resized.convertTo(sample_float, CV_32FC3);
 		else
 			sample_resized.convertTo(sample_float, CV_32FC1);
-		
+
 		if (!mean_.empty())
 			cv::subtract(sample_float, mean_, sample_float);
 

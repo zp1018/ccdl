@@ -50,7 +50,7 @@ message MTCNNBBox {
 
 message MTCNNDatum {
   optional Datum datum = 1;
-  optional MTCNNBBox roi = 2;
+  repeated MTCNNBBox rois = 2;
   repeated float pts = 3; 
 }
 
@@ -463,7 +463,7 @@ message PredictBoxParameter {
 // NOTE
 // Update the next available ID when you add a new LayerParameter field.
 //
-// LayerParameter next available layer-specific ID: 160 (last added: LocLossParameter)
+// LayerParameter next available layer-specific ID: 161 (last added: mtcnn_data_param)
 message LayerParameter {
   optional string name = 1; // the layer name
   optional string type = 2; // the layer type
@@ -584,6 +584,22 @@ message LayerParameter {
   optional STLossParameter st_loss_param = 157;
   optional PowerFileParameter power_file_param = 158;
   optional LocLossParameter loc_loss_param = 159;
+
+  optional MTCNNDataParameter mtcnn_data_param = 160;
+}
+
+message MTCNNDataParameter{
+  optional bool augmented = 1 [default = true];
+  optional bool flip = 2 [default = true];
+
+  // -1 means batch_size
+  optional int32 num_positive = 3 [default = -1];
+  optional int32 num_negitive = 4 [default = -1];
+  optional int32 num_part = 5 [default = -1];
+  optional uint32 resize_width = 6 [default = 0];
+  optional uint32 resize_height = 7 [default = 0];
+  optional float min_negitive_scale = 8 [default = 0.5];
+  optional float max_negitive_scale = 9 [default = 1.5];
 }
 
 message FlipParameter {
@@ -992,6 +1008,8 @@ message DataParameter {
   // Prefetch queue (Number of batches to prefetch to host memory, increase if
   // data access bandwidth varies).
   optional uint32 prefetch = 10 [default = 4];
+
+  optional bool global_augmented = 11 [default = false];
 }
 
 // Message that store parameters used by DetectionEvaluateLayer
